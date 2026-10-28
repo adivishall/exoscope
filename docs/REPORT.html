@@ -1,0 +1,321 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ExoScope — Group L3 Project Report</title><style>
+@page { size: A4; margin: 18mm 16mm; }
+body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #14213D; line-height: 1.5;
+       font-size: 10.5pt; max-width: 900px; margin: 0 auto; }
+h1 { font-size: 20pt; margin: 0 0 4pt; } h2 { font-size: 14pt; margin-top: 18pt; border-bottom: 1px solid #d8dde6; }
+h3 { font-size: 11.5pt; margin-top: 12pt; }
+h2, h3 { break-after: avoid; page-break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 9pt; page-break-inside: avoid; }
+td, th { border: 1px solid #d8dde6; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+th { background: #eef2f8; }
+img { max-width: 100%; display: block; margin: 8pt auto; page-break-inside: avoid; }
+pre, code { font-family: Menlo, Consolas, monospace; font-size: 8.5pt; }
+pre { background: #f4f6fa; padding: 8pt; overflow-x: auto; white-space: pre; }
+hr { border: none; border-top: 1px solid #d8dde6; }
+.cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always;
+         border-left: 6pt solid #2A78D6; padding-left: 18mm; }
+.cover-kicker { font-size: 11pt; letter-spacing: 0.08em; text-transform: uppercase; color: #4A5568; margin: 0; }
+.cover-title { font-size: 28pt; line-height: 1.2; margin: 10pt 0 12pt; }
+.cover-sub { font-size: 12.5pt; color: #4A5568; margin: 0 0 40pt; max-width: 140mm; }
+.cover-label { font-size: 10pt; letter-spacing: 0.08em; text-transform: uppercase; color: #4A5568; margin: 18pt 0 4pt; }
+.cover-value { font-size: 16pt; font-weight: 600; margin: 0; }
+.cover-members { font-size: 14pt; line-height: 1.8; margin: 0; padding-left: 20pt; }
+</style></head><body><div class="cover">
+<p class="cover-kicker">Discrete Mathematics · Course Project Report</p>
+<h1 class="cover-title">ExoScope — Exoplanet Transit Detection and Analysis System</h1>
+<p class="cover-sub">Detecting and evaluating transit candidates in real Kepler and TESS light curves,
+with Discrete Mathematics inside the pipeline</p>
+<div class="cover-group">
+<p class="cover-label">Group</p>
+<p class="cover-value">L3</p>
+<p class="cover-label">Group Members</p>
+<ol class="cover-members">
+<li>ADI VISHAL</li>
+<li>AARAV SHARAN</li>
+<li>AARNAV SLESH</li>
+<li>AARON DSOUZA</li>
+</ol>
+</div>
+</div>
+
+<h2>Abstract</h2>
+<p>ExoScope searches real brightness measurements from NASA's Kepler and TESS missions for transits: the small,
+periodic dips a planet causes when it crosses its star. Two detectors are compared on the same data: an improved
+threshold detector and Box Least Squares (BLS). Five Discrete Mathematics topics are used <em>inside</em> the pipeline,
+not only to explain it:</p>
+<ul>
+<li>the threshold detector's period is an approximate greatest common divisor (number theory);</li>
+<li>the two methods are compared as sets;</li>
+<li>detected events form a graph of periodic consistency;</li>
+<li>relations and functions describe and validate the pipeline;</li>
+<li>combinatorics sizes and runs systematic experiments.</li>
+</ul>
+<p>On nine known planets, BLS recovered every orbital period within 0.22% of the NASA Exoplanet Archive value.
+Further tests:</p>
+<ul>
+<li><strong>Pure noise:</strong> none of 30 light curves was reported as a signal.</li>
+<li><strong>Simulated eclipsing binaries:</strong> all 30 were flagged as non-planetary.</li>
+<li><strong>Injection–recovery:</strong> transits injected into real Kepler data show the practical detection limit is about
+  100–200 ppm per quarter.</li>
+</ul>
+<p>All detections are reported as <em>candidates</em>.</p>
+<h2>1. Problem statement and motivation</h2>
+<p>A transiting planet dims its star by δ ≈ (R_planet / R_star)². That is about 1% for Jupiter crossing the Sun and
+84 ppm for Earth. Real light curves also contain photon noise, stellar variability, instrument systematics and
+data gaps. On top of that, eclipsing binary stars produce dips that look like planets. The problem is therefore to:</p>
+<ol>
+<li>find <em>repeating</em> dips reliably,</li>
+<li>compare detection methods fairly, and</li>
+<li>evaluate a signal without over-claiming.</li>
+</ol>
+<p>The original version of the project (v1) used one hard-coded star. It flagged every point below <code>mean − 3·std</code>
+and took the median spacing of flagged points as the period. On the Kepler-8 data used here, that "period" is
+0.0204 d: the cadence (the time between measurements inside one transit), not the 3.52-day orbit.</p>
+<h2>2. Objectives</h2>
+<ol>
+<li>Retrieve and process real Kepler/TESS data reliably, including offline use.</li>
+<li>Implement and compare an improved threshold detector and BLS.</li>
+<li>Implement five Discrete Mathematics modules that operate on real analysis output.</li>
+<li>Evaluate honestly: measured accuracy, false-alarm and false-positive tests, and injection–recovery.</li>
+<li>Provide an interactive, explainable interface with exports and history.</li>
+</ol>
+<h2>3. Methodology</h2>
+<h3>3.1 Data</h3>
+<p>Light curves are retrieved from MAST through Lightkurve: Kepler long cadence and TESS 2-minute SPOC data, using
+the PDCSAP flux. The mission quality flags are kept. A two-level cache stores FITS files plus compact CSV/JSON
+copies. Three real light curves are bundled for offline use: Kepler-8 Q2, Kepler-10 Q3 and WASP-18 S2.
+Synthetic light curves with injected trapezoidal transits are clearly labelled and provide ground truth.</p>
+<h3>3.2 Preprocessing (<code>exoscope/processing.py</code>)</h3>
+<ol>
+<li>Remove NaN cadences and quality-flagged cadences, plus duplicate timestamps.</li>
+<li>Normalise by the median.</li>
+<li>Detrend with a Savitzky–Golay filter fitted per data segment, with iterative 3σ masking so transits don't bias
+   the trend.</li>
+<li>Clip only upward outliers at 4σ; downward clipping would remove transits.</li>
+<li>Optionally bin, e.g. 2-minute TESS data to 10 minutes.</li>
+</ol>
+<h3>3.3 Threshold detector (<code>exoscope/detection/threshold.py</code>)</h3>
+<ol>
+<li>The noise σ is 1.4826 × the median absolute deviation, which is robust to the transits themselves.</li>
+<li>Points below median − kσ (k = 3) are flagged.</li>
+<li>Consecutive flagged cadences are grouped into events, allowing one unflagged point inside an event.</li>
+<li>Runs shorter than 2 points are rejected.</li>
+<li>Each event gets a deficit-weighted centre, a depth, a duration and an SNR.</li>
+</ol>
+<h3>3.4 Box Least Squares (<code>exoscope/detection/bls.py</code>)</h3>
+<p>Astropy <code>BoxLeastSquares</code> runs on a uniform frequency grid with Δf = D_min / T², capped at 30,000 periods, using
+trial durations of 1–6 h. Per-point errors are scaled up to the measured robust scatter when the archive's errors
+are smaller (Section 6.3). The best signal is expanded into its predicted epochs. Epochs with data form the BLS
+event set; epochs in gaps are recorded separately. Optional iterative masking searches for up to three signals.</p>
+<h3>3.5 Discrete Mathematics (<code>exoscope/dmath/</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Implementation</th>
+<th>Role in the pipeline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Number theory</td>
+<td>Approximate divisibility |Δ − nP| ≤ ε; congruence classes mod P; candidates Δᵢⱼ/k; score = members × fill fraction; least-squares ephemeris tₙ = t₀ + nP; Euclid; rational approximation for aliases</td>
+<td><strong>Produces the threshold detector's period</strong>; tests intervals in the checklist; detects P/2 and 2P aliases</td>
+</tr>
+<tr>
+<td>Set theory</td>
+<td>One-to-one matching within τ (Hungarian algorithm); U = A ∪ B ∪ G; union, intersection, differences, complement, Jaccard; precision/recall as |D ∩ T|, |D − T|, |T − D|</td>
+<td>Compares detectors; agreement criterion; synthetic evaluation</td>
+</tr>
+<tr>
+<td>Graph theory</td>
+<td>V = events, {u,v} ∈ E ⇔ ∃ n ≤ N: ||Δt| − nP| ≤ ε; components, cliques, adjacency matrix, transitivity counterexample</td>
+<td>Shows which events support one periodic signal; isolated vertices flag noise</td>
+</tr>
+<tr>
+<td>Relations &amp; functions</td>
+<td>Function, injective, surjective and bijective checks; relationship types; reflexive, symmetric and transitive properties; composition</td>
+<td>Time → flux must be a function (duplicates removed); event → epoch non-injective flags split detections; event ↔ algorithm is many-to-many</td>
+</tr>
+<tr>
+<td>Combinatorics</td>
+<td>Cartesian product, rule of product, constraints, projections, C(n, k) selection</td>
+<td>Sizes experiments; memoises preprocessing/BLS by projection</td>
+</tr>
+</tbody>
+</table>
+<h3>3.6 Candidate evaluation (<code>exoscope/evaluation.py</code>)</h3>
+<p>There are ten documented checks:</p>
+<ul>
+<li>repeated events (≥ 3);</li>
+<li>intervals that are integer multiples of P;</li>
+<li>BLS SNR (≥ 10 pass, 7.1–10 marginal);</li>
+<li>odd/even core depths (&lt; 3σ, errors from epoch-to-epoch scatter);</li>
+<li>box model preferred over a sinusoid;</li>
+<li>no deep secondary eclipse at phase 0.5;</li>
+<li>data completeness and transit coverage;</li>
+<li>algorithm agreement (Jaccard);</li>
+<li>depth &lt; 3%;</li>
+<li>duration consistent with the period.</li>
+</ul>
+<p>The verdict is gated: an SNR below 7.1 means "no significant signal", and any failed false-positive test means
+"signs of a non-planetary origin". The pass count is a teaching aid, not a probability.</p>
+<h2>4. Implementation and architecture</h2>
+<pre><code>MAST / bundled / synthetic → LightCurveData → preprocess ─┬→ threshold ┐
+                                                          └→ BLS ──────┤
+  ┌────────────────────────────────────────────────────────────────────┘
+  ├→ sets → checklist → UI · SQLite · reports
+  └→ number theory · graphs · relations · combinatorics
+</code></pre>
+<ul>
+<li><strong>Language and libraries:</strong> Python 3.13, using Lightkurve, Astropy, NumPy, SciPy, pandas, NetworkX, Plotly and
+  Streamlit, with SQLite for history.</li>
+<li><strong>Logic</strong> (<code>exoscope/</code>) contains no UI code and is unit-tested.</li>
+<li><strong>UI</strong> (<code>views/</code>, 13 pages) includes:</li>
+<li>Home, Explore Targets, Analyze (with Experiment mode), and Candidate Results;</li>
+<li>five Discrete Mathematics Lab pages, each with concept → worked example → your data → what we learned;</li>
+<li>Learning Center, Analysis History, and About/Methodology.</li>
+<li><strong>Exports:</strong> events and candidates as CSV, settings and metadata as JSON, and a Markdown or HTML report.</li>
+</ul>
+<h2>5. Results</h2>
+<p>All numbers are produced by <code>scripts/evaluate.py</code> (<code>docs/EVALUATION.md</code>, raw tables in <code>docs/results/</code>).</p>
+<h3>5.1 Real data: nine known planets</h3>
+<p><img alt="Period error for nine known planets" src="figures/real_targets_period_error.png" /></p>
+<ul>
+<li><strong>BLS:</strong> recovered all nine periods, with errors from 0.001% (Kepler-17 b) to 0.22% (KELT-11 b).</li>
+<li><strong>Threshold + approximate GCD:</strong> within 0.25% for all nine, and more precise than BLS on most deep transits,
+  because the epochs are fitted by least squares while BLS uses a finite grid.</li>
+<li><strong>v1:</strong> recovered none.</li>
+<li><strong>Verdicts:</strong> all nine are rated "strong potential candidate". These planets are confirmed in the archive by
+  independent observations; ExoScope only shows that it recovers them.</li>
+</ul>
+<h3>5.2 Kepler-10 b: a small planet</h3>
+<table>
+<thead>
+<tr>
+<th>Quantity</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BLS period</td>
+<td>0.83754 d (archive 0.83749 d)</td>
+</tr>
+<tr>
+<td>BLS depth</td>
+<td>134 ppm</td>
+</tr>
+<tr>
+<td>BLS SNR</td>
+<td>43.5</td>
+</tr>
+<tr>
+<td>Implied radius</td>
+<td>≈ 1.3 R⊕ (archive 1.47 R⊕; the box model underestimates depth)</td>
+</tr>
+</tbody>
+</table>
+<p>The threshold detector found 39 events and BLS found 102 epochs. As sets: |A ∩ B| = 35, |A − B| = 4,
+|B − A| = 67, five epochs fell in gaps, and the Jaccard index is 0.33. With the threshold events as vertices
+(P from BLS, ε = 2 h, N = 10), the graph has 39 vertices, 111 edges, 6 components and 4 isolated vertices, and
+its largest clique has 7 vertices.</p>
+<p><img alt="Kepler-10 b folded" src="figures/kepler10_folded.png" />
+<img alt="Set comparison" src="figures/kepler10_venn.png" />
+<img alt="Modular clock" src="figures/kepler10_modclock.png" />
+<img alt="Event graph" src="figures/kepler10_graph.png" /></p>
+<h3>5.3 Synthetic benchmark</h3>
+<p>The benchmark has 120 seeded light curves (4 depths × 2 noise levels × 3 periods × 5 seeds). Each is a 27-day,
+30-minute-cadence light curve with variability, a gap, outliers and missing values. Period recovery within 1%:
+v1 2%, improved threshold 47%, BLS 74%. When depth/noise ≥ 3, BLS reaches F1 = 1.00 in every group. Its failures
+are at depth ≤ noise per point. The median runtime is 0.2 ms for the threshold detector and 0.17 s for BLS.</p>
+<h3>5.4 False alarms and false positives</h3>
+<p>On 30 pure-noise light curves, 0 were reported as a significant signal. On 30 simulated eclipsing binaries
+(alternating 8000/4000 ppm eclipses), all 30 were flagged as non-planetary by the secondary-eclipse or odd/even
+checks.</p>
+<p><img alt="Simulated eclipsing binary" src="figures/synthetic_eclipsing_binary.png" /></p>
+<h3>5.5 Injection–recovery on real light curves</h3>
+<p>Simulated 3-hour transits were injected into Kepler-10 and Kepler-8 data after masking each star's own planet:
+depths of 50–800 ppm, 3 periods and 4 phases each. The same injections were made into white-noise twins with
+the same scatter.</p>
+<ul>
+<li><strong>Kepler-10:</strong> recovers 58% at 100 ppm in real data vs 92% in white noise, and 100% from 200 ppm.</li>
+<li><strong>Kepler-8:</strong> noisier at 183 ppm per point, so it reaches 50% at 200 ppm and 100% at 400 ppm.</li>
+<li><strong>SNR cost of real noise:</strong> a median of 1.07× relative to white noise.</li>
+</ul>
+<p><img alt="Injection–recovery" src="figures/injection_recovery.png" /></p>
+<h2>6. Testing and challenges</h2>
+<h3>6.1 Automated tests</h3>
+<p>There are 94 tests (<code>pytest</code>), and all pass. They cover:</p>
+<ul>
+<li>number theory, including missed and false events, sub-harmonics and edge cases;</li>
+<li>sets, including De Morgan, inclusion–exclusion and tolerance effects;</li>
+<li>graphs, including non-transitivity;</li>
+<li>relations and combinatorics, including memoisation by projection;</li>
+<li>preprocessing: empty input, NaN, quality flags, duplicates, clipping and detrending;</li>
+<li>the detectors: no transit, a single outlier, a known period, eclipsing binaries, multiple signals;</li>
+<li>storage round-trips, reports and history reload;</li>
+<li>a headless render of every page, plus real button flows (analysis form, experiment mode, combinatorics run,
+  synthetic generator, quiz, history reload and re-run).</li>
+</ul>
+<p>The live MAST search and download were also verified by hand in the browser: Kepler-5 Q2 gave
+P = 3.54862 d against the archive's 3.54847 d.</p>
+<h3>6.2 Bugs found by evaluation and fixed</h3>
+<ol>
+<li><strong>Sub-harmonic period:</strong> one false dip let P/3 win the approximate GCD. Fixed by scoring members × fill
+   fraction.</li>
+<li><strong>Odd/even test failing real planets:</strong> Astropy's per-point errors made sampling differences look
+   significant. Fixed by using errors from the epoch-to-epoch scatter of core depths.</li>
+<li><strong>Shape test with the wrong sign:</strong> Astropy's harmonic Δlog L is <em>sine − box</em>.</li>
+<li><strong>False alarms:</strong> 5 of 10 noise curves were graded "possible signal", because BLS's best of ~10⁵ trials reaches
+   SNR 4–6 (the look-elsewhere effect). SNR &lt; 7.1 now means not detected; the result is 0/30.</li>
+<li><strong>Optimistic SNR on real data:</strong> injection–recovery showed the archive's per-point errors are 1.3–1.9×
+   smaller than the measured scatter. BLS now scales them up; Kepler-10's SNR went from 67 to 43.5.</li>
+</ol>
+<h2>7. Limitations</h2>
+<ul>
+<li>The app finds candidates only. There is no pixel-level, spectroscopic or radial-velocity vetting.</li>
+<li>The box model ignores limb darkening, so depths and radii are approximate.</li>
+<li>Each analysis covers one quarter or sector, so planets with fewer than three transits in it cannot be shown to
+  be periodic.</li>
+<li>The checklist thresholds are conventions, not calibrated probabilities.</li>
+<li>The synthetic benchmark uses white noise. The real-data validation covers nine mostly deep, known planets plus
+  one small one. The injection test uses two host stars.</li>
+<li>Searching MAST for new targets needs a network connection, and the first download takes up to about a minute.</li>
+</ul>
+<h2>8. Relation to the literature</h2>
+<p>The course reading (<em>Finding Exoplanets with the Transit Method</em>) was used as follows:</p>
+<ul>
+<li><strong>Lightkurve</strong> is used for data access.</li>
+<li><strong>Collier Cameron et al. (2006):</strong> "clean systematics first, then search" is followed (detrending before BLS,
+  with a bounded grid). SysRem is not implemented, because it needs many stars per frame.</li>
+<li><strong>Giacobbe et al. (2012):</strong> the injection-test approach is used to measure detection limits.</li>
+<li><strong>Rodenbeck et al. (2018):</strong> the lesson that preprocessing can create "discoveries" motivates Experiment mode,
+  the Combinatorics explorer and injection–recovery.</li>
+<li><strong>Future work:</strong> Transit Least Squares (Hippke &amp; Heller 2019), an FFT search for ultra-short periods
+  (Sanchis-Ojeda et al. 2014) and CNN vetting (Shallue &amp; Vanderburg 2018) are not implemented.</li>
+</ul>
+<h2>9. Conclusion</h2>
+<p>ExoScope shows that Discrete Mathematics can be the working machinery of a scientific pipeline:</p>
+<ul>
+<li>congruences and approximate GCDs find periods that survive missed and false dips;</li>
+<li>set operations make detector comparison exact;</li>
+<li>a graph of periodic consistency exposes which dips support one signal;</li>
+<li>relations and combinatorics give the pipeline structure and make experiments countable.</li>
+</ul>
+<p>Applied to real NASA data, it recovers known planets to within 0.22% in period, and it measures its own limits
+honestly. Every result is reported as a candidate.</p>
+<h2>References</h2>
+<ol>
+<li>Collier Cameron, A. et al. (2006). A fast hybrid algorithm for exoplanetary transit searches. MNRAS 373, 799.</li>
+<li>Giacobbe, P. et al. (2012). Photometric transit search for planets around cool stars from the western Italian
+   Alps. MNRAS. arXiv:1206.1729.</li>
+<li>Sanchis-Ojeda, R. et al. (2014). A study of the shortest-period planets found with Kepler. ApJ 787, 47.</li>
+<li>Shallue, C. J. &amp; Vanderburg, A. (2018). Identifying exoplanets with deep learning. AJ. arXiv:1712.05044.</li>
+<li>Rodenbeck, K. et al. (2018). Revisiting the exomoon candidate signal around Kepler-1625b. A&amp;A 617, A49.</li>
+<li>Hippke, M. &amp; Heller, R. (2019). Transit Least Squares. A&amp;A 623, A39.</li>
+<li>Lightkurve Collaboration / KeplerGO. lightkurve. doi:10.5281/zenodo.1181928.</li>
+<li>Kovács, G., Zucker, S. &amp; Mazeh, T. (2002). A box-fitting algorithm in the search for periodic transits.
+   A&amp;A 391, 369.</li>
+<li>NASA Exoplanet Archive, Planetary Systems Composite Parameters (accessed 2026-10-28).</li>
+</ol></body></html>

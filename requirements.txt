@@ -1,0 +1,10 @@
+# Runtime (tested with Python 3.13 on 2026-10-28)
+streamlit>=1.50,<2          # tested 1.66.1
+lightkurve>=2.5,<3          # tested 2.6.0 — MAST retrieval
+astropy>=6.0                # tested 8.0.2 — BoxLeastSquares
+numpy>=2.0                  # tested 2.5.4
+scipy>=1.13                 # tested 1.18.1
+pandas>=2.2                 # tested 2.3.3
+plotly>=6.0                 # tested 7.1.0
+networkx>=3.3               # tested 3.7
+markdown>=3.6               # tested 3.11.2 — HTML report rendering
